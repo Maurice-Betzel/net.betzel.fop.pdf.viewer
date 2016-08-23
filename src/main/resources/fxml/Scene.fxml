@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import java.lang.*?>
+<?import java.util.*?>
+<?import javafx.scene.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<AnchorPane fx:id="anchorPane" maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefHeight="480.0" prefWidth="640.0" xmlns="http://javafx.com/javafx/8" xmlns:fx="http://javafx.com/fxml/1" fx:controller="net.betzel.fop.pdf.viewer.FXMLController">
+    <children>
+        <BorderPane fx:id="borderPane" layoutX="130.0" layoutY="108.0" prefHeight="480.0" prefWidth="640.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
+            <center>
+                <Pagination fx:id="paginationCenter" prefHeight="480.0" prefWidth="640.0" BorderPane.alignment="CENTER" />
+            </center>
+            <top>
+                <MenuBar BorderPane.alignment="CENTER">
+                    <menus>
+                        <Menu mnemonicParsing="false" text="Files">
+                            <items>
+                                <MenuItem mnemonicParsing="false" text="FOP Configuration File" onAction="#fopConfigFile" />
+                                <MenuItem mnemonicParsing="false" text="XML File" onAction="#xmlFile" />
+                                <MenuItem mnemonicParsing="false" text="XSLT 2.0 File" onAction="#xslFile" />
+                            </items>
+                        </Menu>
+                        <Menu mnemonicParsing="false" text="Execute">
+                            <items>
+                                <MenuItem mnemonicParsing="false" text="Refresh" onAction="#refresh"  />
+                                <MenuItem mnemonicParsing="false" text="Start automatic refreshing" onAction="#startAutoUpdate" />
+                                <MenuItem mnemonicParsing="false" text="Stop automatic refreshing" onAction="#stopAutoUpdate" />
+                            </items>
+                        </Menu>
+                    </menus>
+                </MenuBar>
+            </top>
+        </BorderPane>          
+    </children>
+</AnchorPane>

@@ -19,8 +19,12 @@ import java.util.concurrent.TimeUnit;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.beans.binding.IntegerBinding;
+import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.property.SimpleObjectProperty;
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
@@ -35,6 +39,7 @@ import javafx.scene.control.Pagination;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.input.ScrollEvent;
 import javafx.stage.FileChooser;
 import javafx.util.Callback;
 import javax.imageio.ImageIO;
@@ -57,10 +62,12 @@ import org.apache.xmlgraphics.util.MimeConstants;
 
 public class FXMLController implements Initializable {
 
+    private final ScanProgressDialog scanProgressDialog = new ScanProgressDialog();
     private final ObservableList<BufferedImage> images = FXCollections.observableArrayList();
     private final ScheduledExecutorService scheduledExecutor = Executors.newSingleThreadScheduledExecutor();
     private final ExecutorService backgoundExecutor = Executors.newSingleThreadExecutor();
     private ObjectProperty<ImageView> imageViewObjectProperty;
+    private DoubleProperty zoom;
     private TransformerFactory transformerFactory;
     private ScheduledFuture<?> refresherHandle;
     private ScrollPane scrollPane;
@@ -77,6 +84,7 @@ public class FXMLController implements Initializable {
     public void initialize(URL url, ResourceBundle rb) {
         scrollPane = new ScrollPane();
         scrollPane.setPannable(true);
+        zoom = new SimpleDoubleProperty(1);
         imageViewObjectProperty = new SimpleObjectProperty<>();
         scrollPane.contentProperty().bind(imageViewObjectProperty);
         images.addListener(new ListChangeListener<BufferedImage>() {
@@ -111,12 +119,34 @@ public class FXMLController implements Initializable {
                 }
             }
         });
+        ChangeListener<Number> changeListener = new ChangeListener<Number>() {
+            @Override
+            public void changed(ObservableValue<? extends Number> observable, Number oldValue, Number newValue) {
+                if (newValue.floatValue() < 0.10 || newValue.floatValue() > 1.75) {
+                    zoom.set(oldValue.doubleValue());
+                } else if (!images.isEmpty()) {
+                    updateImage(paginationCenter.getCurrentPageIndex());
+                }
+            }
+        };
+        zoom.addListener(changeListener);
+        scrollPane.addEventFilter(ScrollEvent.ANY, (ScrollEvent event) -> {
+            if (event.getDeltaY() > 0) {
+                zoom.set(zoom.get() * 1.15);
+            } else if (event.getDeltaY() < 0) {
+                zoom.set(zoom.get() / 1.15);
+            }
+        });
     }
 
     private void createImages(FileStreamSources fileStreamSources) {
+        Platform.runLater(() -> {
+            scanProgressDialog.show();
+        });
         final Task<List<BufferedImage>> createImagesTask = new Task<List<BufferedImage>>() {
             @Override
             protected List<BufferedImage> call() throws Exception {
+
                 ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
                 List<BufferedImage> bufferedImages = new ArrayList();
                 FOUserAgent userAgent = fopFactory.newFOUserAgent();
@@ -134,7 +164,7 @@ public class FXMLController implements Initializable {
                             + " generated " + pageSequenceResults.getPageCount() + " pages.");
                 }
                 PDDocument pdDocument = null;
-                try{
+                try {
                     pdDocument = PDDocument.load(new ByteArrayInputStream(byteArrayOutputStream.toByteArray()));
                     PDFRenderer pdfRenderer = new PDFRenderer(pdDocument);
                     int pageCounter = 0;
@@ -159,7 +189,7 @@ public class FXMLController implements Initializable {
                 Platform.runLater(() -> {
                     images.clear();
                     images.addAll(createImagesTask.getValue());
-                    System.out.println("Fertig imaging " + images.size());
+                    scanProgressDialog.close();
                 });
             }
         });
@@ -167,20 +197,27 @@ public class FXMLController implements Initializable {
             @Override
             public void handle(WorkerStateEvent event) {
                 System.out.println("Fehler imaging! " + createImagesTask.getException().toString());
+                Platform.runLater(() -> {
+                    scanProgressDialog.close();
+                });
             }
         });
         backgoundExecutor.submit(createImagesTask);
     }
 
     private void updateImage(final int pageNumber) {
-        //BufferedImage bufferedImage = images.get(pageNumber);
+        Platform.runLater(() -> {
+            scanProgressDialog.show();
+        });
         final Task<ImageView> updateImageTask = new Task<ImageView>() {
             @Override
             protected ImageView call() throws Exception {
                 BufferedImage bufferedImage = images.get(pageNumber);
+                final int scaledWidth = (int) (bufferedImage.getWidth() * zoom.get());
+                final int scaledHeight = (int) (bufferedImage.getHeight() * zoom.get());
                 ByteArrayOutputStream fbaos = new ByteArrayOutputStream();
                 ImageIO.write(bufferedImage, "png", fbaos);
-                ImageView imageView = new ImageView(new Image(new ByteArrayInputStream(fbaos.toByteArray()), bufferedImage.getWidth() / 2, bufferedImage.getHeight() / 2, true, true));
+                ImageView imageView = new ImageView(new Image(new ByteArrayInputStream(fbaos.toByteArray()), scaledWidth, scaledHeight, true, true));
                 imageView.setPreserveRatio(true);
                 return imageView;
             }
@@ -190,6 +227,7 @@ public class FXMLController implements Initializable {
             public void handle(WorkerStateEvent event) {
                 Platform.runLater(() -> {
                     imageViewObjectProperty.set(updateImageTask.getValue());
+                    scanProgressDialog.close();
                 });
             }
         });
@@ -197,6 +235,9 @@ public class FXMLController implements Initializable {
             @Override
             public void handle(WorkerStateEvent event) {
                 System.out.println("Fehler beim updaten! " + updateImageTask.getException().toString());
+                Platform.runLater(() -> {
+                    scanProgressDialog.close();
+                });
             }
         });
         backgoundExecutor.submit(updateImageTask);

@@ -161,63 +161,62 @@ public class FXMLController implements Initializable, FileChange {
     }
 
     private void createImages(FileStreamSources fileStreamSources) {
-        Platform.runLater(() -> {
-            scanProgressDialog.show();
-        });
-        final Task<List<BufferedImage>> createImagesTask = new Task<List<BufferedImage>>() {
-            @Override
-            protected List<BufferedImage> call() throws Exception {
+        if (Platform.isFxApplicationThread()) {
+            final Task<List<BufferedImage>> createImagesTask = new Task<List<BufferedImage>>() {
+                @Override
+                protected List<BufferedImage> call() throws Exception {
 
-                ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-                List<BufferedImage> bufferedImages = new ArrayList();
-                FOUserAgent userAgent = fopFactory.newFOUserAgent();
-                userAgent.getEventBroadcaster().addEventListener(fopEventListener);
-                Fop fop = fopFactory.newFop(MimeConstants.MIME_PDF, userAgent, byteArrayOutputStream);
-                Transformer transformer = transformerFactory.newTransformer(fileStreamSources.getXslSource());
-                transformer.setErrorListener(xmlTransformErrorListener);
-                Result result = new SAXResult(fop.getDefaultHandler());
-                transformer.transform(fileStreamSources.getXmlSource(), result);
-                FormattingResults foResults = fop.getResults();
-                List pageSequences = foResults.getPageSequences();
-                for (java.util.Iterator it = pageSequences.iterator(); it.hasNext();) {
-                    PageSequenceResults pageSequenceResults = (PageSequenceResults) it.next();
-                    System.out.println("PageSequence "
-                            + (String.valueOf(pageSequenceResults.getID()).length() > 0 ? pageSequenceResults.getID() : "<no id>")
-                            + " generated " + pageSequenceResults.getPageCount() + " pages.");
-                }
-                try (PDDocument pdDocument = PDDocument.load(new ByteArrayInputStream(byteArrayOutputStream.toByteArray()))) {
-                    PDFRenderer pdfRenderer = new PDFRenderer(pdDocument);
-                    int pageCounter = 0;
-                    for (PDPage pdPage : pdDocument.getPages()) {
-                        bufferedImages.add(pdfRenderer.renderImageWithDPI(pageCounter, 150, ImageType.RGB));
-                        pageCounter++;
+                    ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+                    List<BufferedImage> bufferedImages = new ArrayList();
+                    FOUserAgent userAgent = fopFactory.newFOUserAgent();
+                    userAgent.getEventBroadcaster().addEventListener(fopEventListener);
+                    Fop fop = fopFactory.newFop(MimeConstants.MIME_PDF, userAgent, byteArrayOutputStream);
+                    Transformer transformer = transformerFactory.newTransformer(fileStreamSources.getXslSource());
+                    transformer.setErrorListener(xmlTransformErrorListener);
+                    Result result = new SAXResult(fop.getDefaultHandler());
+                    transformer.transform(fileStreamSources.getXmlSource(), result);
+                    FormattingResults foResults = fop.getResults();
+                    List pageSequences = foResults.getPageSequences();
+                    for (java.util.Iterator it = pageSequences.iterator(); it.hasNext();) {
+                        PageSequenceResults pageSequenceResults = (PageSequenceResults) it.next();
+                        System.out.println("PageSequence "
+                                + (String.valueOf(pageSequenceResults.getID()).length() > 0 ? pageSequenceResults.getID() : "<no id>")
+                                + " generated " + pageSequenceResults.getPageCount() + " pages.");
                     }
-                }
-                return bufferedImages;
-            }
-        };
-        createImagesTask.setOnSucceeded(new EventHandler<WorkerStateEvent>() {
-            @Override
-            public void handle(WorkerStateEvent event) {
-                Platform.runLater(() -> {
-                    images.clear();
-                    images.addAll(createImagesTask.getValue());
-                });
-            }
-        });
-        createImagesTask.setOnFailed(new EventHandler<WorkerStateEvent>() {
-            @Override
-            public void handle(WorkerStateEvent event) {
-                System.err.println("Fehler imaging! " + createImagesTask.getException().toString());
-                Platform.runLater(() -> {
-                    scanProgressDialog.close();
-                    if (reentrantLock.isLocked()) {
-                        reentrantLock.unlock();
+                    try (PDDocument pdDocument = PDDocument.load(new ByteArrayInputStream(byteArrayOutputStream.toByteArray()))) {
+                        PDFRenderer pdfRenderer = new PDFRenderer(pdDocument);
+                        int pageCounter = 0;
+                        for (PDPage pdPage : pdDocument.getPages()) {
+                            bufferedImages.add(pdfRenderer.renderImageWithDPI(pageCounter, 150, ImageType.RGB));
+                            pageCounter++;
+                        }
                     }
-                });
-            }
-        });
-        backgoundExecutor.submit(createImagesTask);
+                    return bufferedImages;
+                }
+            };
+            createImagesTask.setOnSucceeded(new EventHandler<WorkerStateEvent>() {
+                @Override
+                public void handle(WorkerStateEvent event) {
+                    Platform.runLater(() -> {
+                        images.clear();
+                        images.addAll(createImagesTask.getValue());
+                    });
+                }
+            });
+            createImagesTask.setOnFailed(new EventHandler<WorkerStateEvent>() {
+                @Override
+                public void handle(WorkerStateEvent event) {
+                    System.err.println("Fehler imaging! " + createImagesTask.getException().toString());
+                    Platform.runLater(() -> {
+                        scanProgressDialog.close();
+                        if (reentrantLock.isLocked()) {
+                            reentrantLock.unlock();
+                        }
+                    });
+                }
+            });
+            backgoundExecutor.submit(createImagesTask);
+        }
     }
 
     private void updateImage(final int pageNumber) {
@@ -268,14 +267,18 @@ public class FXMLController implements Initializable, FileChange {
             if (reentrantLock.isLocked()) {
                 fopEvents.appendText("Work in progress\n");
             } else {
-                try {
-                    reentrantLock.lock();
-                    String xml = new String(Files.readAllBytes(xmlFile.toPath()), StandardCharsets.UTF_8);
-                    String xsl = new String(Files.readAllBytes(xslFile.toPath()), StandardCharsets.UTF_8);
-                    createImages(new FileStreamSources(xml, xsl));
-                } catch (IOException ex) {
-                    System.err.println(ex.getMessage());
-                }
+                Platform.runLater(() -> {
+                    try {
+                        reentrantLock.lock();
+                        scanProgressDialog.show();
+                        String xml = new String(Files.readAllBytes(xmlFile.toPath()), StandardCharsets.UTF_8);
+                        String xsl = new String(Files.readAllBytes(xslFile.toPath()), StandardCharsets.UTF_8);
+                        createImages(new FileStreamSources(xml, xsl));
+
+                    } catch (IOException ex) {
+                        System.err.println(ex.getMessage());
+                    }
+                });
             }
         } else {
             System.out.println("NOT READY!");

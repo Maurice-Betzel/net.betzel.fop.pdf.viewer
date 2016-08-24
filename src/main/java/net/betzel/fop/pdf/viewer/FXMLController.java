@@ -37,8 +37,10 @@ import javafx.fxml.Initializable;
 import javafx.scene.Node;
 import javafx.scene.control.Pagination;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextArea;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.input.ScrollEvent;
 import javafx.stage.FileChooser;
 import javafx.util.Callback;
@@ -63,13 +65,13 @@ import org.apache.xmlgraphics.util.MimeConstants;
 
 public class FXMLController implements Initializable, FileChange {
 
+    private final FileChangeWatcher fileChangeWatcher = new FileChangeWatcher(1000, this, this.getClass().getCanonicalName());
     private final ProgressDialog scanProgressDialog = new ProgressDialog();
     private final ObservableList<BufferedImage> images = FXCollections.observableArrayList();
     private final ScheduledExecutorService scheduledExecutor = Executors.newSingleThreadScheduledExecutor();
     private final ExecutorService backgoundExecutor = Executors.newSingleThreadExecutor();
     private final XmlTransformErrorListener xmlTransformErrorListener = new XmlTransformErrorListener();
-    private final FopEventListener fopEventListener = new FopEventListener();
-    private final FileChangeWatcher fileChangeWatcher = new FileChangeWatcher(1000, this, this.getClass().getCanonicalName());
+    private FopEventListener fopEventListener;
     private ObjectProperty<ImageView> imageViewObjectProperty;
     private DoubleProperty zoom;
     private TransformerFactory transformerFactory;
@@ -82,12 +84,32 @@ public class FXMLController implements Initializable, FileChange {
     private volatile boolean isReady = false;
 
     @FXML
+    private TextArea fopEvents;
+
+    @FXML
     private Pagination paginationCenter;
 
     @Override
     public void initialize(URL url, ResourceBundle rb) {
+        fopEventListener = new FopEventListener(fopEvents);
+        fopEvents.setEditable(false);
+        fopEvents.textProperty().addListener(new ChangeListener<Object>() {
+            @Override
+            public void changed(ObservableValue<?> observable, Object oldValue,
+                    Object newValue) {
+                fopEvents.setScrollTop(Double.MAX_VALUE);
+            }
+        });
         scrollPane = new ScrollPane();
         scrollPane.setPannable(true);
+        scrollPane.setOnKeyPressed(new EventHandler<KeyEvent>() {
+            @Override
+            public void handle(KeyEvent event) {
+                switch (event.getCode()) {
+                    case F5: changed();
+                }
+            }
+        });
         zoom = new SimpleDoubleProperty(1);
         imageViewObjectProperty = new SimpleObjectProperty<>();
         scrollPane.contentProperty().bind(imageViewObjectProperty);
@@ -169,7 +191,7 @@ public class FXMLController implements Initializable, FileChange {
                             + (String.valueOf(pageSequenceResults.getID()).length() > 0 ? pageSequenceResults.getID() : "<no id>")
                             + " generated " + pageSequenceResults.getPageCount() + " pages.");
                 }
-                try (PDDocument pdDocument = PDDocument.load(new ByteArrayInputStream(byteArrayOutputStream.toByteArray()))){                    
+                try (PDDocument pdDocument = PDDocument.load(new ByteArrayInputStream(byteArrayOutputStream.toByteArray()))) {
                     PDFRenderer pdfRenderer = new PDFRenderer(pdDocument);
                     int pageCounter = 0;
                     for (PDPage pdPage : pdDocument.getPages()) {
@@ -316,6 +338,7 @@ public class FXMLController implements Initializable, FileChange {
     private void isReady() {
         if (xmlFile != null && xslFile != null && fopConfig != null) {
             isReady = true;
+            changed();
         } else {
             isReady = false;
         }

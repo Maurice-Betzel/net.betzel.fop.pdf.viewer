@@ -17,21 +17,24 @@
                     <menus>
                         <Menu mnemonicParsing="false" text="Files">
                             <items>
-                                <MenuItem mnemonicParsing="false" text="FOP Configuration File" onAction="#fopConfigFile" />
-                                <MenuItem mnemonicParsing="false" text="XML File" onAction="#xmlFile" />
-                                <MenuItem mnemonicParsing="false" text="XSLT 2.0 File" onAction="#xslFile" />
+                                <MenuItem mnemonicParsing="false" onAction="#fopConfigFile" text="FOP Configuration File" />
+                                <MenuItem mnemonicParsing="false" onAction="#xmlFile" text="XML File" />
+                                <MenuItem mnemonicParsing="false" onAction="#xslFile" text="XSLT 2.0 File" />
                             </items>
                         </Menu>
                         <Menu mnemonicParsing="false" text="Execute">
                             <items>
-                                <MenuItem mnemonicParsing="false" text="Refresh" onAction="#changed"  />
-                                <MenuItem mnemonicParsing="false" text="Start automatic refreshing" onAction="#startAutoUpdate" />
-                                <MenuItem mnemonicParsing="false" text="Stop automatic refreshing" onAction="#stopAutoUpdate" />
+                                <MenuItem mnemonicParsing="false" onAction="#changed" text="Refresh" />
+                                <MenuItem mnemonicParsing="false" onAction="#startAutoUpdate" text="Start automatic refreshing" />
+                                <MenuItem mnemonicParsing="false" onAction="#stopAutoUpdate" text="Stop automatic refreshing" />
                             </items>
                         </Menu>
                     </menus>
                 </MenuBar>
             </top>
+         <right>
+            <TextArea fx:id="fopEvents" prefHeight="200.0" prefWidth="200.0" wrapText="true" BorderPane.alignment="CENTER" />
+         </right>
         </BorderPane>          
     </children>
 </AnchorPane>

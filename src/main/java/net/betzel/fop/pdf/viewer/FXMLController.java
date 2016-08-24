@@ -66,6 +66,8 @@ public class FXMLController implements Initializable {
     private final ObservableList<BufferedImage> images = FXCollections.observableArrayList();
     private final ScheduledExecutorService scheduledExecutor = Executors.newSingleThreadScheduledExecutor();
     private final ExecutorService backgoundExecutor = Executors.newSingleThreadExecutor();
+    private final XmlTransformErrorListener xmlTransformErrorListener = new XmlTransformErrorListener();
+    private final FopEventListener fopEventListener = new FopEventListener();
     private ObjectProperty<ImageView> imageViewObjectProperty;
     private DoubleProperty zoom;
     private TransformerFactory transformerFactory;
@@ -150,9 +152,10 @@ public class FXMLController implements Initializable {
                 ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
                 List<BufferedImage> bufferedImages = new ArrayList();
                 FOUserAgent userAgent = fopFactory.newFOUserAgent();
+                userAgent.getEventBroadcaster().addEventListener(fopEventListener);
                 Fop fop = fopFactory.newFop(MimeConstants.MIME_PDF, userAgent, byteArrayOutputStream);
                 Transformer transformer = transformerFactory.newTransformer(fileStreamSources.getXslSource());
-                transformer.setErrorListener(new XmlTransformErrorListener());
+                transformer.setErrorListener(xmlTransformErrorListener);
                 Result result = new SAXResult(fop.getDefaultHandler());
                 transformer.transform(fileStreamSources.getXmlSource(), result);
                 FormattingResults foResults = fop.getResults();
@@ -163,21 +166,12 @@ public class FXMLController implements Initializable {
                             + (String.valueOf(pageSequenceResults.getID()).length() > 0 ? pageSequenceResults.getID() : "<no id>")
                             + " generated " + pageSequenceResults.getPageCount() + " pages.");
                 }
-                PDDocument pdDocument = null;
-                try {
-                    pdDocument = PDDocument.load(new ByteArrayInputStream(byteArrayOutputStream.toByteArray()));
+                try (PDDocument pdDocument = PDDocument.load(new ByteArrayInputStream(byteArrayOutputStream.toByteArray()))){                    
                     PDFRenderer pdfRenderer = new PDFRenderer(pdDocument);
                     int pageCounter = 0;
                     for (PDPage pdPage : pdDocument.getPages()) {
                         bufferedImages.add(pdfRenderer.renderImageWithDPI(pageCounter, 150, ImageType.RGB));
                         pageCounter++;
-                    }
-                } finally {
-                    if (pdDocument != null) {
-                        try {
-                            pdDocument.close();
-                        } catch (IOException ignored) {
-                        }
                     }
                 }
                 return bufferedImages;
@@ -196,7 +190,7 @@ public class FXMLController implements Initializable {
         createImagesTask.setOnFailed(new EventHandler<WorkerStateEvent>() {
             @Override
             public void handle(WorkerStateEvent event) {
-                System.out.println("Fehler imaging! " + createImagesTask.getException().toString());
+                System.err.println("Fehler imaging! " + createImagesTask.getException().toString());
                 Platform.runLater(() -> {
                     scanProgressDialog.close();
                 });
@@ -234,7 +228,7 @@ public class FXMLController implements Initializable {
         updateImageTask.setOnFailed(new EventHandler<WorkerStateEvent>() {
             @Override
             public void handle(WorkerStateEvent event) {
-                System.out.println("Fehler beim updaten! " + updateImageTask.getException().toString());
+                System.err.println("Fehler beim updaten! " + updateImageTask.getException().toString());
                 Platform.runLater(() -> {
                     scanProgressDialog.close();
                 });
@@ -253,10 +247,10 @@ public class FXMLController implements Initializable {
                 xsl = new String(Files.readAllBytes(xslFile.toPath()), StandardCharsets.UTF_8);
                 createImages(new FileStreamSources(xml, xsl));
             } catch (IOException ex) {
-                System.out.println(ex.getMessage());
+                System.err.println(ex.getMessage());
             }
         } else {
-            System.err.println("NOT READY!");
+            System.out.println("NOT READY!");
         }
     }
 
@@ -274,7 +268,7 @@ public class FXMLController implements Initializable {
             fopFactory = builder.build();
             isReady();
         } catch (Exception ex) {
-            System.out.println(ex.getMessage());
+            System.err.println(ex.getMessage());
         }
     }
 

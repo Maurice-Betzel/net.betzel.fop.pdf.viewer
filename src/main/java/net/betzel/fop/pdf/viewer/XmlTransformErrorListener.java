@@ -11,19 +11,19 @@ public class XmlTransformErrorListener implements ErrorListener {
 
     @Override
     public void warning(TransformerException e) throws TransformerException {
-        System.err.println("[WARN ] " +e.getMessage());
+        System.err.println("[XML_WARN] " +e.getMessage());
         throw(e);
     }
 
     @Override
     public void error(TransformerException e) throws TransformerException {
-        System.err.println("[ERROR] " +e.getMessage());
+        System.err.println("[XML_ERROR] " +e.getMessage());
         throw(e);
     }
 
     @Override
     public void fatalError(TransformerException e) throws TransformerException {
-        System.err.println("[FATAL] " + e.getMessage());
+        System.err.println("[XML_FATAL] " + e.getMessage());
         throw(e);
     }
     

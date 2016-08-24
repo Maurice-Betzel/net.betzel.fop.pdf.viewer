@@ -20,12 +20,12 @@ import javafx.stage.StageStyle;
  *
  * @author mbetzel
  */
-public class ScanProgressDialog {
+public class ProgressDialog {
 
     private final Stage dialogStage = new Stage();
     private final ProgressIndicator progressIndicator = new ProgressIndicator();
 
-    public ScanProgressDialog() {
+    public ProgressDialog() {
         dialogStage.initStyle(StageStyle.TRANSPARENT);
         dialogStage.setResizable(false);
         dialogStage.initModality(Modality.APPLICATION_MODAL);

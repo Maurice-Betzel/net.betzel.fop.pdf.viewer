@@ -21,13 +21,13 @@ public class FopEventListener implements EventListener {
         String message = EventFormatter.format(event);
         EventSeverity severity = event.getSeverity();
         if (severity == EventSeverity.INFO) {
-            System.out.println("[INFO ] " + message);
+            System.out.println("[FOP_INFO] " + message);
         } else if (severity == EventSeverity.WARN) {
-            System.out.println("[WARN ] " + message);
+            System.out.println("[FOP_WARN] " + message);
         } else if (severity == EventSeverity.ERROR) {
-            System.err.println("[ERROR] " + message);
+            System.err.println("[FOP_ERROR] " + message);
         } else if (severity == EventSeverity.FATAL) {
-            System.err.println("[FATAL] " + message);
+            System.err.println("[FOP_FATAL] " + message);
         } else {
             assert false;
         }

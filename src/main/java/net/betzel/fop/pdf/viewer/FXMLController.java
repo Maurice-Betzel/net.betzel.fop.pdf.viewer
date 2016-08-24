@@ -47,6 +47,7 @@ import javax.xml.transform.Result;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.sax.SAXResult;
+import net.betzel.fop.pdf.viewer.FileChangeWatcher.FileChange;
 import org.apache.fop.apps.FOUserAgent;
 import org.apache.fop.apps.Fop;
 import org.apache.fop.apps.FopConfParser;
@@ -60,14 +61,15 @@ import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.xmlgraphics.util.MimeConstants;
 
-public class FXMLController implements Initializable {
+public class FXMLController implements Initializable, FileChange {
 
-    private final ScanProgressDialog scanProgressDialog = new ScanProgressDialog();
+    private final ProgressDialog scanProgressDialog = new ProgressDialog();
     private final ObservableList<BufferedImage> images = FXCollections.observableArrayList();
     private final ScheduledExecutorService scheduledExecutor = Executors.newSingleThreadScheduledExecutor();
     private final ExecutorService backgoundExecutor = Executors.newSingleThreadExecutor();
     private final XmlTransformErrorListener xmlTransformErrorListener = new XmlTransformErrorListener();
     private final FopEventListener fopEventListener = new FopEventListener();
+    private final FileChangeWatcher fileChangeWatcher = new FileChangeWatcher(1000, this, this.getClass().getCanonicalName());
     private ObjectProperty<ImageView> imageViewObjectProperty;
     private DoubleProperty zoom;
     private TransformerFactory transformerFactory;
@@ -139,6 +141,7 @@ public class FXMLController implements Initializable {
                 zoom.set(zoom.get() / 1.15);
             }
         });
+        fileChangeWatcher.start();
     }
 
     private void createImages(FileStreamSources fileStreamSources) {
@@ -238,13 +241,12 @@ public class FXMLController implements Initializable {
     }
 
     @FXML
-    private void refresh() {
+    @Override
+    public void changed() {
         if (isReady) {
-            String xml = null;
-            String xsl = null;
             try {
-                xml = new String(Files.readAllBytes(xmlFile.toPath()), StandardCharsets.UTF_8);
-                xsl = new String(Files.readAllBytes(xslFile.toPath()), StandardCharsets.UTF_8);
+                String xml = new String(Files.readAllBytes(xmlFile.toPath()), StandardCharsets.UTF_8);
+                String xsl = new String(Files.readAllBytes(xslFile.toPath()), StandardCharsets.UTF_8);
                 createImages(new FileStreamSources(xml, xsl));
             } catch (IOException ex) {
                 System.err.println(ex.getMessage());
@@ -278,6 +280,7 @@ public class FXMLController implements Initializable {
         FileChooser.ExtensionFilter extFilter = new FileChooser.ExtensionFilter("XML file (*.xml)", "*.xml");
         fileChooser.getExtensionFilters().add(extFilter);
         xmlFile = fileChooser.showOpenDialog(MainApp.getPrimaryStage());
+        fileChangeWatcher.addTarget(xmlFile.toPath());
         isReady();
     }
 
@@ -287,6 +290,7 @@ public class FXMLController implements Initializable {
         FileChooser.ExtensionFilter extFilter = new FileChooser.ExtensionFilter("XML file (*.xsl)", "*.xsl");
         fileChooser.getExtensionFilters().add(extFilter);
         xslFile = fileChooser.showOpenDialog(MainApp.getPrimaryStage());
+        fileChangeWatcher.addTarget(xslFile.toPath());
         isReady();
     }
 
@@ -294,10 +298,10 @@ public class FXMLController implements Initializable {
     public void startAutoUpdate() {
         Runnable refresher = new Runnable() {
             public void run() {
-                refresh();
+                changed();
             }
         };
-        refresherHandle = scheduledExecutor.scheduleAtFixedRate(refresher, 0, 10, TimeUnit.SECONDS);
+        refresherHandle = scheduledExecutor.scheduleAtFixedRate(refresher, 0, 15, TimeUnit.SECONDS);
     }
 
     @FXML
@@ -318,6 +322,7 @@ public class FXMLController implements Initializable {
     }
 
     public void shutDown() {
+        fileChangeWatcher.stop();
         if (scheduledExecutor != null) {
             scheduledExecutor.shutdown();
         }

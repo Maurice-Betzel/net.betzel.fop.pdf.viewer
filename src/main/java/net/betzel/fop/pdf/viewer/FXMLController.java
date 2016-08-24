@@ -16,6 +16,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.beans.binding.IntegerBinding;
@@ -66,21 +67,23 @@ import org.apache.xmlgraphics.util.MimeConstants;
 public class FXMLController implements Initializable, FileChange {
 
     private final FileChangeWatcher fileChangeWatcher = new FileChangeWatcher(1000, this, this.getClass().getCanonicalName());
-    private final ProgressDialog scanProgressDialog = new ProgressDialog();
-    private final ObservableList<BufferedImage> images = FXCollections.observableArrayList();
     private final ScheduledExecutorService scheduledExecutor = Executors.newSingleThreadScheduledExecutor();
-    private final ExecutorService backgoundExecutor = Executors.newSingleThreadExecutor();
     private final XmlTransformErrorListener xmlTransformErrorListener = new XmlTransformErrorListener();
-    private FopEventListener fopEventListener;
+    private final ObservableList<BufferedImage> images = FXCollections.observableArrayList();
+    private final ExecutorService backgoundExecutor = Executors.newSingleThreadExecutor();
+    private final ProgressDialog scanProgressDialog = new ProgressDialog();
+    private final ReentrantLock reentrantLock = new ReentrantLock();
     private ObjectProperty<ImageView> imageViewObjectProperty;
-    private DoubleProperty zoom;
     private TransformerFactory transformerFactory;
     private ScheduledFuture<?> refresherHandle;
+    private FopEventListener fopEventListener;
     private ScrollPane scrollPane;
     private FopFactory fopFactory;
+    private DoubleProperty zoom;
     private File fopConfig;
     private File xmlFile;
     private File xslFile;
+
     private volatile boolean isReady = false;
 
     @FXML
@@ -95,21 +98,12 @@ public class FXMLController implements Initializable, FileChange {
         fopEvents.setEditable(false);
         fopEvents.textProperty().addListener(new ChangeListener<Object>() {
             @Override
-            public void changed(ObservableValue<?> observable, Object oldValue,
-                    Object newValue) {
+            public void changed(ObservableValue<?> observable, Object oldValue, Object newValue) {
                 fopEvents.setScrollTop(Double.MAX_VALUE);
             }
         });
         scrollPane = new ScrollPane();
         scrollPane.setPannable(true);
-        scrollPane.setOnKeyPressed(new EventHandler<KeyEvent>() {
-            @Override
-            public void handle(KeyEvent event) {
-                switch (event.getCode()) {
-                    case F5: changed();
-                }
-            }
-        });
         zoom = new SimpleDoubleProperty(1);
         imageViewObjectProperty = new SimpleObjectProperty<>();
         scrollPane.contentProperty().bind(imageViewObjectProperty);
@@ -208,7 +202,6 @@ public class FXMLController implements Initializable, FileChange {
                 Platform.runLater(() -> {
                     images.clear();
                     images.addAll(createImagesTask.getValue());
-                    scanProgressDialog.close();
                 });
             }
         });
@@ -218,6 +211,9 @@ public class FXMLController implements Initializable, FileChange {
                 System.err.println("Fehler imaging! " + createImagesTask.getException().toString());
                 Platform.runLater(() -> {
                     scanProgressDialog.close();
+                    if (reentrantLock.isLocked()) {
+                        reentrantLock.unlock();
+                    }
                 });
             }
         });
@@ -225,9 +221,6 @@ public class FXMLController implements Initializable, FileChange {
     }
 
     private void updateImage(final int pageNumber) {
-        Platform.runLater(() -> {
-            scanProgressDialog.show();
-        });
         final Task<ImageView> updateImageTask = new Task<ImageView>() {
             @Override
             protected ImageView call() throws Exception {
@@ -247,6 +240,9 @@ public class FXMLController implements Initializable, FileChange {
                 Platform.runLater(() -> {
                     imageViewObjectProperty.set(updateImageTask.getValue());
                     scanProgressDialog.close();
+                    if (reentrantLock.isLocked()) {
+                        reentrantLock.unlock();
+                    }
                 });
             }
         });
@@ -256,6 +252,9 @@ public class FXMLController implements Initializable, FileChange {
                 System.err.println("Fehler beim updaten! " + updateImageTask.getException().toString());
                 Platform.runLater(() -> {
                     scanProgressDialog.close();
+                    if (reentrantLock.isLocked()) {
+                        reentrantLock.unlock();
+                    }
                 });
             }
         });
@@ -266,15 +265,21 @@ public class FXMLController implements Initializable, FileChange {
     @Override
     public void changed() {
         if (isReady) {
-            try {
-                String xml = new String(Files.readAllBytes(xmlFile.toPath()), StandardCharsets.UTF_8);
-                String xsl = new String(Files.readAllBytes(xslFile.toPath()), StandardCharsets.UTF_8);
-                createImages(new FileStreamSources(xml, xsl));
-            } catch (IOException ex) {
-                System.err.println(ex.getMessage());
+            if (reentrantLock.isLocked()) {
+                fopEvents.appendText("Work in progress\n");
+            } else {
+                try {
+                    reentrantLock.lock();
+                    String xml = new String(Files.readAllBytes(xmlFile.toPath()), StandardCharsets.UTF_8);
+                    String xsl = new String(Files.readAllBytes(xslFile.toPath()), StandardCharsets.UTF_8);
+                    createImages(new FileStreamSources(xml, xsl));
+                } catch (IOException ex) {
+                    System.err.println(ex.getMessage());
+                }
             }
         } else {
             System.out.println("NOT READY!");
+            fopEvents.appendText("Missing files\n");
         }
     }
 
@@ -284,15 +289,16 @@ public class FXMLController implements Initializable, FileChange {
         FileChooser.ExtensionFilter extFilter = new FileChooser.ExtensionFilter("FOP Configuration file (*.xml)", "*.xml");
         fileChooser.getExtensionFilters().add(extFilter);
         fopConfig = fileChooser.showOpenDialog(MainApp.getPrimaryStage());
-        // FOP
-        try {
-            transformerFactory = new net.sf.saxon.TransformerFactoryImpl();
-            FopConfParser parser = new FopConfParser(fopConfig);
-            FopFactoryBuilder builder = parser.getFopFactoryBuilder();
-            fopFactory = builder.build();
-            isReady();
-        } catch (Exception ex) {
-            System.err.println(ex.getMessage());
+        if (fopConfig != null) {
+            try {
+                transformerFactory = new net.sf.saxon.TransformerFactoryImpl();
+                FopConfParser parser = new FopConfParser(fopConfig);
+                FopFactoryBuilder builder = parser.getFopFactoryBuilder();
+                fopFactory = builder.build();
+                isReady();
+            } catch (Exception ex) {
+                System.err.println(ex.getMessage());
+            }
         }
     }
 
@@ -302,8 +308,10 @@ public class FXMLController implements Initializable, FileChange {
         FileChooser.ExtensionFilter extFilter = new FileChooser.ExtensionFilter("XML file (*.xml)", "*.xml");
         fileChooser.getExtensionFilters().add(extFilter);
         xmlFile = fileChooser.showOpenDialog(MainApp.getPrimaryStage());
-        fileChangeWatcher.addTarget(xmlFile.toPath());
-        isReady();
+        if (xmlFile != null) {
+            fileChangeWatcher.addTarget(xmlFile.toPath());
+            isReady();
+        }
     }
 
     @FXML
@@ -312,8 +320,10 @@ public class FXMLController implements Initializable, FileChange {
         FileChooser.ExtensionFilter extFilter = new FileChooser.ExtensionFilter("XML file (*.xsl)", "*.xsl");
         fileChooser.getExtensionFilters().add(extFilter);
         xslFile = fileChooser.showOpenDialog(MainApp.getPrimaryStage());
-        fileChangeWatcher.addTarget(xslFile.toPath());
-        isReady();
+        if (xslFile != null) {
+            fileChangeWatcher.addTarget(xslFile.toPath());
+            isReady();
+        }
     }
 
     @FXML

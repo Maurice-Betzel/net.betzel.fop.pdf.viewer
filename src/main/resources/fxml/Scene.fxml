@@ -24,7 +24,7 @@
                         </Menu>
                         <Menu mnemonicParsing="false" text="Execute">
                             <items>
-                                <MenuItem mnemonicParsing="false" onAction="#changed" text="Refresh" />
+                                <MenuItem mnemonicParsing="false" onAction="#changed" text="Refresh (F5)" />
                                 <MenuItem mnemonicParsing="false" onAction="#startAutoUpdate" text="Start automatic refreshing" />
                                 <MenuItem mnemonicParsing="false" onAction="#stopAutoUpdate" text="Stop automatic refreshing" />
                             </items>

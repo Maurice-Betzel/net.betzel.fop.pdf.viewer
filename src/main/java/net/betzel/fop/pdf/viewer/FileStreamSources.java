@@ -16,8 +16,8 @@ import javax.xml.transform.stream.StreamSource;
  */
 public class FileStreamSources {
     
-    private Source xmlSource;
-    private Source xslSource;
+    private final Source xmlSource;
+    private final Source xslSource;
 
     public FileStreamSources(String xml, String xsl) {
         xmlSource = new StreamSource(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));

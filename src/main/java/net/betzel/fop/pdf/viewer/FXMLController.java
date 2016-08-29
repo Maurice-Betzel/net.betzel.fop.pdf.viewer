@@ -32,19 +32,15 @@ import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
 import javafx.concurrent.WorkerStateEvent;
 import javafx.event.ActionEvent;
-import javafx.event.EventHandler;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
-import javafx.scene.Node;
 import javafx.scene.control.Pagination;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import javafx.scene.input.KeyEvent;
 import javafx.scene.input.ScrollEvent;
 import javafx.stage.FileChooser;
-import javafx.util.Callback;
 import javax.imageio.ImageIO;
 import javax.xml.transform.Result;
 import javax.xml.transform.Transformer;
@@ -63,13 +59,14 @@ import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.xmlgraphics.util.MimeConstants;
+import org.xml.sax.SAXException;
 
 public class FXMLController implements Initializable, FileChange {
 
     private final FileChangeWatcher fileChangeWatcher = new FileChangeWatcher(1000, this, this.getClass().getCanonicalName());
     private final ScheduledExecutorService scheduledExecutor = Executors.newSingleThreadScheduledExecutor();
     private final XmlTransformErrorListener xmlTransformErrorListener = new XmlTransformErrorListener();
-    private final ObservableList<BufferedImage> images = FXCollections.observableArrayList();
+    private final ObservableList<BufferedImage> images = FXCollections.synchronizedObservableList(FXCollections.observableArrayList());
     private final ExecutorService backgoundExecutor = Executors.newSingleThreadExecutor();
     private final ProgressDialog scanProgressDialog = new ProgressDialog();
     private final ReentrantLock reentrantLock = new ReentrantLock();
@@ -96,23 +93,17 @@ public class FXMLController implements Initializable, FileChange {
     public void initialize(URL url, ResourceBundle rb) {
         fopEventListener = new FopEventListener(fopEvents);
         fopEvents.setEditable(false);
-        fopEvents.textProperty().addListener(new ChangeListener<Object>() {
-            @Override
-            public void changed(ObservableValue<?> observable, Object oldValue, Object newValue) {
-                fopEvents.setScrollTop(Double.MAX_VALUE);
-            }
+        fopEvents.textProperty().addListener((ObservableValue<?> observable, Object oldValue, Object newValue) -> {
+            fopEvents.setScrollTop(Double.MAX_VALUE);
         });
         scrollPane = new ScrollPane();
         scrollPane.setPannable(true);
         zoom = new SimpleDoubleProperty(1);
         imageViewObjectProperty = new SimpleObjectProperty<>();
         scrollPane.contentProperty().bind(imageViewObjectProperty);
-        images.addListener(new ListChangeListener<BufferedImage>() {
-            @Override
-            public void onChanged(ListChangeListener.Change<? extends BufferedImage> c) {
-                if (images.isEmpty()) {
-                    paginationCenter.setCurrentPageIndex(0);
-                }
+        images.addListener((ListChangeListener.Change<? extends BufferedImage> c) -> {
+            if (images.isEmpty()) {
+                paginationCenter.setCurrentPageIndex(0);
             }
         });
         paginationCenter.pageCountProperty().bind(new IntegerBinding() {
@@ -126,27 +117,21 @@ public class FXMLController implements Initializable, FileChange {
             }
         });
         paginationCenter.disableProperty().bind(Bindings.isEmpty(images));
-        paginationCenter.setPageFactory(new Callback<Integer, Node>() {
-            @Override
-            public Node call(Integer pageNumber) {
-                if (images.isEmpty()) {
-                    return null;
-                } else if (pageNumber >= images.size() || pageNumber < 0) {
-                    return null;
-                } else {
-                    updateImage(pageNumber);
-                    return scrollPane;
-                }
+        paginationCenter.setPageFactory((Integer pageNumber) -> {
+            if (images.isEmpty()) {
+                return null;
+            } else if (pageNumber >= images.size() || pageNumber < 0) {
+                return null;
+            } else {
+                updateImage(pageNumber);
+                return scrollPane;
             }
         });
-        ChangeListener<Number> changeListener = new ChangeListener<Number>() {
-            @Override
-            public void changed(ObservableValue<? extends Number> observable, Number oldValue, Number newValue) {
-                if (newValue.floatValue() < 0.10 || newValue.floatValue() > 1.75) {
-                    zoom.set(oldValue.doubleValue());
-                } else if (!images.isEmpty()) {
-                    updateImage(paginationCenter.getCurrentPageIndex());
-                }
+        ChangeListener<Number> changeListener = (ObservableValue<? extends Number> observable, Number oldValue, Number newValue) -> {
+            if (newValue.floatValue() < 0.10 || newValue.floatValue() > 1.75) {
+                zoom.set(oldValue.doubleValue());
+            } else if (!images.isEmpty()) {
+                updateImage(paginationCenter.getCurrentPageIndex());
             }
         };
         zoom.addListener(changeListener);
@@ -194,26 +179,20 @@ public class FXMLController implements Initializable, FileChange {
                     return bufferedImages;
                 }
             };
-            createImagesTask.setOnSucceeded(new EventHandler<WorkerStateEvent>() {
-                @Override
-                public void handle(WorkerStateEvent event) {
-                    Platform.runLater(() -> {
-                        images.clear();
-                        images.addAll(createImagesTask.getValue());
-                    });
-                }
+            createImagesTask.setOnSucceeded((WorkerStateEvent event) -> {
+                Platform.runLater(() -> {
+                    images.clear();
+                    images.addAll(createImagesTask.getValue());
+                });
             });
-            createImagesTask.setOnFailed(new EventHandler<WorkerStateEvent>() {
-                @Override
-                public void handle(WorkerStateEvent event) {
-                    System.err.println("Fehler imaging! " + createImagesTask.getException().toString());
-                    Platform.runLater(() -> {
-                        scanProgressDialog.close();
-                        if (reentrantLock.isLocked()) {
-                            reentrantLock.unlock();
-                        }
-                    });
-                }
+            createImagesTask.setOnFailed((WorkerStateEvent event) -> {
+                System.err.println("Fehler imaging! " + createImagesTask.getException().toString());
+                Platform.runLater(() -> {
+                    scanProgressDialog.close();
+                    if (reentrantLock.isLocked()) {
+                        reentrantLock.unlock();
+                    }
+                });
             });
             backgoundExecutor.submit(createImagesTask);
         }
@@ -233,29 +212,23 @@ public class FXMLController implements Initializable, FileChange {
                 return imageView;
             }
         };
-        updateImageTask.setOnSucceeded(new EventHandler<WorkerStateEvent>() {
-            @Override
-            public void handle(WorkerStateEvent event) {
-                Platform.runLater(() -> {
-                    imageViewObjectProperty.set(updateImageTask.getValue());
-                    scanProgressDialog.close();
-                    if (reentrantLock.isLocked()) {
-                        reentrantLock.unlock();
-                    }
-                });
-            }
+        updateImageTask.setOnSucceeded((WorkerStateEvent event) -> {
+            Platform.runLater(() -> {
+                imageViewObjectProperty.set(updateImageTask.getValue());
+                scanProgressDialog.close();
+                if (reentrantLock.isLocked()) {
+                    reentrantLock.unlock();
+                }
+            });
         });
-        updateImageTask.setOnFailed(new EventHandler<WorkerStateEvent>() {
-            @Override
-            public void handle(WorkerStateEvent event) {
-                System.err.println("Fehler beim updaten! " + updateImageTask.getException().toString());
-                Platform.runLater(() -> {
-                    scanProgressDialog.close();
-                    if (reentrantLock.isLocked()) {
-                        reentrantLock.unlock();
-                    }
-                });
-            }
+        updateImageTask.setOnFailed((WorkerStateEvent event) -> {
+            System.err.println("Fehler beim updaten! " + updateImageTask.getException().toString());
+            Platform.runLater(() -> {
+                scanProgressDialog.close();
+                if (reentrantLock.isLocked()) {
+                    reentrantLock.unlock();
+                }
+            });
         });
         backgoundExecutor.submit(updateImageTask);
     }
@@ -265,7 +238,9 @@ public class FXMLController implements Initializable, FileChange {
     public void changed() {
         if (isReady) {
             if (reentrantLock.isLocked()) {
-                fopEvents.appendText("Work in progress\n");
+                Platform.runLater(() -> {
+                    fopEvents.appendText("Work in progress\n");
+                });
             } else {
                 Platform.runLater(() -> {
                     try {
@@ -282,7 +257,9 @@ public class FXMLController implements Initializable, FileChange {
             }
         } else {
             System.out.println("NOT READY!");
-            fopEvents.appendText("Missing files\n");
+            Platform.runLater(() -> {
+                fopEvents.appendText("Missing files\n");
+            });
         }
     }
 
@@ -299,7 +276,7 @@ public class FXMLController implements Initializable, FileChange {
                 FopFactoryBuilder builder = parser.getFopFactoryBuilder();
                 fopFactory = builder.build();
                 isReady();
-            } catch (Exception ex) {
+            } catch (SAXException | IOException ex) {
                 System.err.println(ex.getMessage());
             }
         }
@@ -331,20 +308,16 @@ public class FXMLController implements Initializable, FileChange {
 
     @FXML
     public void startAutoUpdate() {
-        Runnable refresher = new Runnable() {
-            public void run() {
-                changed();
-            }
+        Runnable refresher = () -> {
+            changed();
         };
         refresherHandle = scheduledExecutor.scheduleAtFixedRate(refresher, 0, 15, TimeUnit.SECONDS);
     }
 
     @FXML
     public void stopAutoUpdate() {
-        scheduledExecutor.schedule(new Runnable() {
-            public void run() {
-                refresherHandle.cancel(true);
-            }
+        scheduledExecutor.schedule(() -> {
+            refresherHandle.cancel(true);
         }, 1, TimeUnit.SECONDS);
     }
 

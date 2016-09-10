@@ -181,9 +181,9 @@ public class FXMLController implements Initializable, FileChange {
                     List pageSequences = foResults.getPageSequences();
                     for (java.util.Iterator it = pageSequences.iterator(); it.hasNext();) {
                         PageSequenceResults pageSequenceResults = (PageSequenceResults) it.next();
-                        System.out.println("PageSequence "
+                        logging.appendText("PageSequence "
                                 + (String.valueOf(pageSequenceResults.getID()).length() > 0 ? pageSequenceResults.getID() : "<no id>")
-                                + " generated " + pageSequenceResults.getPageCount() + " pages.");
+                                + " generated " + pageSequenceResults.getPageCount() + " pages.\n");
                     }
                     try (PDDocument pdDocument = PDDocument.load(new ByteArrayInputStream(byteArrayOutputStream.toByteArray()))) {
                         PDFRenderer pdfRenderer = new PDFRenderer(pdDocument);
@@ -221,9 +221,9 @@ public class FXMLController implements Initializable, FileChange {
                 BufferedImage bufferedImage = images.get(pageNumber);
                 final int scaledWidth = (int) (bufferedImage.getWidth() * zoom.get());
                 final int scaledHeight = (int) (bufferedImage.getHeight() * zoom.get());
-                ByteArrayOutputStream fbaos = new ByteArrayOutputStream();
-                ImageIO.write(bufferedImage, "png", fbaos);
-                ImageView imageView = new ImageView(new Image(new ByteArrayInputStream(fbaos.toByteArray()), scaledWidth, scaledHeight, true, true));
+                ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+                ImageIO.write(bufferedImage, "png", byteArrayOutputStream);
+                ImageView imageView = new ImageView(new Image(new ByteArrayInputStream(byteArrayOutputStream.toByteArray()), scaledWidth, scaledHeight, true, true));
                 imageView.setPreserveRatio(true);
                 return imageView;
             }

@@ -14,11 +14,7 @@
         <mainClass>net.betzel.fop.pdf.viewer.MainApp</mainClass>
     </properties>
 
-    <organization>
-        <name>betzel.net</name>
-    </organization>
-    
-    <description>XSL-FO to PDF Viewer</description>
+    <description>XSL-FO to PDF JavaFX Viewer</description>
     
     <dependencies>
         <dependency>

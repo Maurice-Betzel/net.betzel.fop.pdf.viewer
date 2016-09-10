@@ -33,7 +33,7 @@
                 </MenuBar>
             </top>
          <right>
-            <TextArea fx:id="fopEvents" prefHeight="200.0" prefWidth="200.0" wrapText="true" BorderPane.alignment="CENTER" />
+            <TextArea fx:id="logging" prefHeight="200.0" prefWidth="200.0" wrapText="true" BorderPane.alignment="CENTER" />
          </right>
         </BorderPane>          
     </children>
